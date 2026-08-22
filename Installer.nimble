@@ -1,7 +1,7 @@
 version       = "0.1.0"
 author        = "Zenit Linux Developers"
 description   = "Zenith Installer -- graficzny instalator Zenith Linux (Fidget UI)"
-license       = "GPL-3.0"
+license       = "BSD-3"
 srcDir        = "src"
 bin           = @["installer"]
 binDir        = "bin"
