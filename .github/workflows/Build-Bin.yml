@@ -1,1 +1,60 @@
+name: Build installer binary
 
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nim
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: "2.0.x"
+
+      - name: Install Janet
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y janet || (curl -fsSL https://janet-lang.org/install.sh | sudo bash)
+
+      - name: Install system deps for Fidget (OpenGL/GLFW/X11)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev \
+            xorg-dev libxi-dev libxcursor-dev libxinerama-dev libxrandr-dev
+
+      - name: Install nimble deps
+        run: nimble install -y --depsOnly
+
+      - name: Build (janet build.janet release)
+        run: janet build.janet release
+
+      - name: Package release artifacts
+        if: startsWith(github.ref, 'refs/tags/')
+        run: janet build.janet package "${{ github.ref_name }}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          path: |
+            bin/installer
+            bin/installer-*-*
+            bin/SHA256SUMS-*
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            bin/installer-*-*
+            bin/SHA256SUMS-*
