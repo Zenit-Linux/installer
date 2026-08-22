@@ -1,4 +1,4 @@
-# Zenith Installer
+# Zenit Installer
 
 Graficzny instalator Zenith Linux. Zbudowany w Nim, interfejs na
 [Fidget](https://github.com/treeform/fidget) (immediate-mode UI,
