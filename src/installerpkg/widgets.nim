@@ -1,3 +1,4 @@
+import std/strutils
 import fidget
 
 const
@@ -9,7 +10,12 @@ const
   ColorDanger*    = "#f38ba8"
   ColorText*      = "#cdd6f4"
   ColorTextDim*   = "#a6adc8"
-  FontFamily*     = "Inter"
+  FontFamily*     = "UiFont" ## klucz w rejestrze fontów Fidget -- MUSI się zgadzać
+                              ## z pierwszym argumentem `loadFont` w app.nim::runInstallerGui.
+                              ## Fizycznie to Instrument Sans (SIL OFL 1.1, patrz
+                              ## data/fonts/UiFont-OFL.txt) -- nazwa klucza jest tylko
+                              ## wewnętrznym identyfikatorem Fidget, nie musi odpowiadać
+                              ## prawdziwej nazwie rodziny fontu.
 
 proc heading*(id, label: string, x, y, w: float, size: float = 28) =
   text id:
@@ -92,12 +98,7 @@ proc textField*(id, placeholder: string, x, y, w, h: float, value: var string) =
   ## to jest wbudowany mechanizm Fidget (patrz typography/textbox), a
   ## nie coś, co odtwarzamy ręcznie przez keyboard.inputText.
   ##
-  ## UWAGA: maskowanie hasła (wyświetlanie "•" zamiast znaków) nie jest
-  ## tu zrobione -- `binding` renderuje bezpośrednio zawartość zmiennej.
-  ## Pełne maskowanie wymagałoby osobnego, potwierdzonego API Fidget do
-  ## podmiany renderowanych znaków bez ruszania bufora edycji; zostawione
-  ## w README jako punkt do dopracowania zamiast zgadywania kolejnego
-  ## niepewnego API.
+  ## Bez maskowania -- dla pól hasła użyj `passwordField` niżej.
   group id:
     box x, y, w, h
     rectangle id & "-bg":
@@ -117,6 +118,89 @@ proc textField*(id, placeholder: string, x, y, w, h: float, value: var string) =
         fill ColorTextDim
         font FontFamily, 15, 400, 0, hLeft, vCenter
         characters placeholder
+
+proc passwordField*(id, placeholder: string, x, y, w, h: float, value: var string) =
+  ## Jak `textField`, ale maskuje wpisywane znaki -- bez zgadywania
+  ## niepotwierdzonego API Fidget do podmiany renderowanych znaków
+  ## WEWNĄTRZ `binding` (o czym ostrzega komentarz w `textField`). Zamiast
+  ## tego: prawdziwe pole edycyjne nadal używa `binding value` (żeby
+  ## zadziałały kursor/backspace/strzałki -- to jedyny sposób edycji, jaki
+  ## mamy), ale jego kolor tekstu (`fill`) jest taki sam jak tło pola, więc
+  ## wpisywane znaki są wizualnie niewidoczne. Osobny, nakładający się
+  ## tekst (zwykłe `characters`, NIE `binding`) pokazuje kropki w liczbie
+  ## równej `value.len`. Oba triki (`binding` i `fill` w kolorze tła) są
+  ## już użyte gdzie indziej w tym pliku -- to nie jest nowe, niepewne API,
+  ## tylko ich kombinacja.
+  group id:
+    box x, y, w, h
+    rectangle id & "-bg":
+      box 0, 0, w, h
+      fill ColorSurface
+      cornerRadius 8
+      stroke ColorAccentDim
+      strokeWeight 1.5
+    text id & "-edit":
+      box 12, 0, w - 24, h
+      fill ColorSurface # celowo = kolor tła: prawdziwa edycja, niewidoczny tekst
+      font FontFamily, 15, 400, 0, hLeft, vCenter
+      binding value
+    if value.len > 0:
+      text id & "-dots":
+        box 12, 0, w - 24, h
+        fill ColorText
+        font FontFamily, 15, 400, 0, hLeft, vCenter
+        characters "•".repeat(value.len)
+    else:
+      text id & "-placeholder":
+        box 12, 0, w - 24, h
+        fill ColorTextDim
+        font FontFamily, 15, 400, 0, hLeft, vCenter
+        characters placeholder
+
+proc sizeStepper*(id: string, x, y, w, h: float, valueMiB: var int,
+                   stepMiB, minMiB, maxMiB: int) =
+  ## Licznik +/- do wyboru rozmiaru w MiB -- prostszy i bezpieczniejszy niż
+  ## parsowanie na bieżąco dowolnego tekstu wpisanego w textField, i
+  ## spójny ze stylem reszty UI (wybiera się klikając, nie pisząc liczby).
+  ## Trzy niezależne, płaskie `group`-y (minus/wartość/plus) zamiast
+  ## zagnieżdżania grup w grupie -- ten sam, jedno-poziomowy wzorzec co
+  ## `button`/`checkbox`/`textField` powyżej, żadnego nowego API.
+  let btnW = h
+  let labelW = w - 2 * btnW - 16
+  group id & "-minus":
+    box x, y, btnW, h
+    onClick:
+      valueMiB = max(minMiB, valueMiB - stepMiB)
+    rectangle id & "-minus-bg":
+      box 0, 0, btnW, h
+      fill ColorSurface
+      cornerRadius 8
+    text id & "-minus-label":
+      box 0, 0, btnW, h
+      fill ColorText
+      font FontFamily, 18, 700, 0, hCenter, vCenter
+      characters "-"
+  group id & "-value":
+    box x + btnW + 8, y, labelW, h
+    text id & "-value-label":
+      box 0, 0, labelW, h
+      fill ColorText
+      font FontFamily, 15, 500, 0, hCenter, vCenter
+      characters (if valueMiB >= 1024: (valueMiB.float / 1024.0).formatFloat(precision = 1) & " GiB"
+                  else: $valueMiB & " MiB")
+  group id & "-plus":
+    box x + btnW + 8 + labelW + 8, y, btnW, h
+    onClick:
+      valueMiB = min(maxMiB, valueMiB + stepMiB)
+    rectangle id & "-plus-bg":
+      box 0, 0, btnW, h
+      fill ColorSurface
+      cornerRadius 8
+    text id & "-plus-label":
+      box 0, 0, btnW, h
+      fill ColorText
+      font FontFamily, 18, 700, 0, hCenter, vCenter
+      characters "+"
 
 proc progressBar*(id: string, x, y, w, h: float, fraction: float) =
   group id:
