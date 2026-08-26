@@ -1,6 +1,6 @@
 version       = "0.1.0"
 author        = "Zenit Linux Developers"
-description   = "Zenith Installer -- graficzny instalator Zenith Linux (Fidget UI)"
+description   = "Zenit Installer -- graficzny instalator Zenit Linux (Fidget UI)"
 license       = "BSD-3"
 srcDir        = "src"
 bin           = @["installer"]
@@ -30,4 +30,14 @@ requires "fidget >= 0.4.0"   # immediate-mode UI (treeform/fidget) -- lekki, now
 requires "opengl >= 1.2.3"
 
 task buildRelease, "Build optimized release binary":
+  exec "test -f data/fonts/UiFont-Regular.ttf || (echo 'BRAK data/fonts/UiFont-Regular.ttf -- patrz data/fonts/README.md' && exit 1)"
   exec "nim c -d:release -d:ssl --opt:speed -o:bin/installer src/installer.nim"
+
+task buildServer, "Build a headless binary (-d:server) -- no Fidget/OpenGL/X11 linked at all":
+  exec "nim c -d:release -d:server -d:ssl --opt:speed -o:bin/installer-server src/installer.nim"
+
+task test, "Run unit tests (pure-logic helpers, no real disk access)":
+  exec "nim c -r tests/test_diskutil.nim"
+  exec "nim c -r tests/test_validation.nim"
+  exec "nim c -r tests/test_partitioner.nim"
+  exec "nim c -r tests/test_i18n.nim"
