@@ -14,12 +14,12 @@ proc detectBootLaunchMode*(): BootLaunchMode =
     # w środowisku live) -- traktuj jak samodzielne uruchomienie.
     return blmStandalone
   let params = cmdline.splitWhitespace()
-  var isZenithLive = false
+  var isZenitLive = false
   var installerRequested = false
   for p in params:
-    if p == "boot=zenith": isZenithLive = true
+    if p == "boot=zenit": isZenitLive = true
     if p == "installer=1" or p == "installer": installerRequested = true
-  if not isZenithLive:
+  if not isZenitLive:
     return blmStandalone
   if installerRequested: blmInstallerAuto else: blmLiveOnly
 
