@@ -1,21 +1,85 @@
 import std/strutils
 import fidget
 
-const
-  ColorBg*        = "#1e1e2e"
-  ColorBgAlt*     = "#181825"
-  ColorSurface*   = "#313244"
-  ColorAccent*    = "#89b4fa"
-  ColorAccentDim* = "#45475a"
-  ColorDanger*    = "#f38ba8"
-  ColorText*      = "#cdd6f4"
-  ColorTextDim*   = "#a6adc8"
-  FontFamily*     = "UiFont" ## klucz w rejestrze fontów Fidget -- MUSI się zgadzać
+type Theme* = enum themeDark, themeLight
+
+var currentTheme*: Theme = themeDark
+
+# Motyw: czarny + złoty/żółty (bez niebieskiego), z przełączalnym wariantem
+# jasnym. `var`, nie `const` -- `applyTheme` zmienia je w locie, a że
+# drawMain jest wołane co klatkę, zmiana widoczna jest natychmiast na
+# następnej klatce (bez restartu). ColorDanger zostaje czerwonawy w OBU
+# wariantach celowo -- błędy/ostrzeżenia powinny wyróżniać się kolorem
+# niezależnym od reszty palety, to standardowa konwencja czytelności UI,
+# nie część samego motywu.
+var
+  ColorBg*        = "#171310"
+  ColorBgAlt*     = "#0d0b09"
+  ColorSurface*   = "#2b241c"
+  ColorAccent*    = "#e0a83e"
+  ColorAccentDim* = "#4a3f2e"
+  ColorDanger*    = "#e0544a"
+  ColorText*      = "#f2e9d8"
+  ColorTextDim*   = "#a89a83"
+
+const FontFamily* = "UiFont" ## klucz w rejestrze fontów Fidget -- MUSI się zgadzać
                               ## z pierwszym argumentem `loadFont` w app.nim::runInstallerGui.
                               ## Fizycznie to Instrument Sans (SIL OFL 1.1, patrz
                               ## data/fonts/UiFont-OFL.txt) -- nazwa klucza jest tylko
                               ## wewnętrznym identyfikatorem Fidget, nie musi odpowiadać
                               ## prawdziwej nazwie rodziny fontu.
+
+proc applyTheme*(t: Theme) =
+  currentTheme = t
+  case t
+  of themeDark:
+    ColorBg        = "#171310"
+    ColorBgAlt     = "#0d0b09"
+    ColorSurface   = "#2b241c"
+    ColorAccent    = "#e0a83e"
+    ColorAccentDim = "#4a3f2e"
+    ColorDanger    = "#e0544a"
+    ColorText      = "#f2e9d8"
+    ColorTextDim   = "#a89a83"
+  of themeLight:
+    ColorBg        = "#faf6ee"
+    ColorBgAlt     = "#f0e6d0"
+    ColorSurface   = "#ece0c4"
+    ColorAccent    = "#b8860b" # ciemniejsze złoto -- kontrast na jasnym tle
+    ColorAccentDim = "#ddd0ac"
+    ColorDanger    = "#c0392b"
+    ColorText      = "#2b241c"
+    ColorTextDim   = "#6b5f48"
+
+# UWAGA na temat struktury poniższych widżetów (WAŻNE, przeczytaj przed edycją):
+#
+# Potwierdzone na żywym zrzucie ekranu z działającej binarki: `group id:
+# rectangle ...; text ...` (osobny węzeł `rectangle` jako DZIECKO grupy,
+# w pełni nachodzący na sąsiadujący `text`) renderował WYŁĄCZNIE
+# prostokąt -- tekst stawał się niewidoczny. Dokładnie to samo miały
+# `button`/`choiceChip` i aktywny element paska bocznego.
+#
+# Za to `group "sidebar"` w app.nim -- z `fill` ustawionym BEZPOŚREDNIO
+# NA SOBIE (nie przez osobny `rectangle`-dziecko) i wieloma dziećmi
+# (7x sidebarItem + heading, w tym ZAGNIEŻDŻONE grupy) -- renderuje się
+# w 100% poprawnie na tym samym zrzucie: widać jednocześnie tło paska,
+# wszystkie etykiety kroków i nagłówek. To najsilniejszy dostępny dowód,
+# jaki mam bez środowiska graficznego do testowania na żywo.
+#
+# Wniosek i zastosowana naprawa: NIGDY nie używać osobnego węzła
+# `rectangle` jako tła obok tekstu w tej samej grupie. Zamiast tego --
+# `fill`/`cornerRadius`/`stroke`/`strokeWeight` idą BEZPOŚREDNIO na
+# `group`, a tekst (i ewentualne zagnieżdżone pod-grupy z WŁASNYM fill,
+# gdy potrzebny jest niezależny podregion, np. znacznik checkboxa czy
+# pasek postępu) są jej dziećmi -- dokładnie ten wzorzec, jaki ma
+# potwierdzone działający `group "sidebar"`.
+#
+# Nie mam tu środowiska graficznego do przetestowania Fidget na żywo --
+# to naprawa oparta na najsilniejszym dostępnym dowodzie, nie na
+# potwierdzonej dokumentacji API. Zbuduj i sprawdź -- jeśli dalej nie
+# działa, to prawdopodobnie sam SPOSÓB ustawiania `fill`/`cornerRadius`
+# (a nie obecność osobnego `rectangle`) jest tu czynnikiem, i trzeba by
+# poszukać innego wzorca.
 
 proc heading*(id, label: string, x, y, w: float, size: float = 28) =
   text id:
@@ -41,13 +105,11 @@ proc button*(id, label: string, x, y, w, h: float,
   let fg = if primary or danger: ColorBgAlt else: ColorText
   group id:
     box x, y, w, h
+    fill bg
+    cornerRadius 10
     if enabled and not onClickAction.isNil:
       onClick:
         onClickAction()
-    rectangle id & "-bg":
-      box 0, 0, w, h
-      fill bg
-      cornerRadius 10
     text id & "-label":
       box 0, 0, w, h
       fill fg
@@ -58,12 +120,10 @@ proc choiceChip*(id, label: string, x, y, w, h: float, selected: bool,
                   onClickAction: proc()) =
   group id:
     box x, y, w, h
+    fill (if selected: ColorAccent else: ColorSurface)
+    cornerRadius 8
     onClick:
       onClickAction()
-    rectangle id & "-bg":
-      box 0, 0, w, h
-      fill (if selected: ColorAccent else: ColorSurface)
-      cornerRadius 8
     text id & "-label":
       box 0, 0, w, h
       fill (if selected: ColorBgAlt else: ColorText)
@@ -76,16 +136,16 @@ proc checkbox*(id, label: string, x, y, w: float, value: var bool) =
     box x, y, w, boxSize
     onClick:
       value = not value
-    rectangle id & "-box":
+    group id & "-box":
       box 0, 0, boxSize, boxSize
       fill (if value: ColorAccent else: ColorSurface)
       cornerRadius 6
-    if value:
-      text id & "-check":
-        box 0, 0, boxSize, boxSize
-        fill ColorBgAlt
-        font FontFamily, 15, 700, 0, hCenter, vCenter
-        characters "V"
+      if value:
+        text id & "-check":
+          box 0, 0, boxSize, boxSize
+          fill ColorBgAlt
+          font FontFamily, 15, 700, 0, hCenter, vCenter
+          characters "V"
     text id & "-label":
       box boxSize + 10, 0, w - boxSize - 10, boxSize
       fill ColorText
@@ -101,12 +161,10 @@ proc textField*(id, placeholder: string, x, y, w, h: float, value: var string) =
   ## Bez maskowania -- dla pól hasła użyj `passwordField` niżej.
   group id:
     box x, y, w, h
-    rectangle id & "-bg":
-      box 0, 0, w, h
-      fill ColorSurface
-      cornerRadius 8
-      stroke ColorAccentDim
-      strokeWeight 1.5
+    fill ColorSurface
+    cornerRadius 8
+    stroke ColorAccentDim
+    strokeWeight 1.5
     text id & "-value":
       box 12, 0, w - 24, h
       fill ColorText
@@ -128,17 +186,13 @@ proc passwordField*(id, placeholder: string, x, y, w, h: float, value: var strin
   ## mamy), ale jego kolor tekstu (`fill`) jest taki sam jak tło pola, więc
   ## wpisywane znaki są wizualnie niewidoczne. Osobny, nakładający się
   ## tekst (zwykłe `characters`, NIE `binding`) pokazuje kropki w liczbie
-  ## równej `value.len`. Oba triki (`binding` i `fill` w kolorze tła) są
-  ## już użyte gdzie indziej w tym pliku -- to nie jest nowe, niepewne API,
-  ## tylko ich kombinacja.
+  ## równej `value.len`.
   group id:
     box x, y, w, h
-    rectangle id & "-bg":
-      box 0, 0, w, h
-      fill ColorSurface
-      cornerRadius 8
-      stroke ColorAccentDim
-      strokeWeight 1.5
+    fill ColorSurface
+    cornerRadius 8
+    stroke ColorAccentDim
+    strokeWeight 1.5
     text id & "-edit":
       box 12, 0, w - 24, h
       fill ColorSurface # celowo = kolor tła: prawdziwa edycja, niewidoczny tekst
@@ -162,19 +216,14 @@ proc sizeStepper*(id: string, x, y, w, h: float, valueMiB: var int,
   ## Licznik +/- do wyboru rozmiaru w MiB -- prostszy i bezpieczniejszy niż
   ## parsowanie na bieżąco dowolnego tekstu wpisanego w textField, i
   ## spójny ze stylem reszty UI (wybiera się klikając, nie pisząc liczby).
-  ## Trzy niezależne, płaskie `group`-y (minus/wartość/plus) zamiast
-  ## zagnieżdżania grup w grupie -- ten sam, jedno-poziomowy wzorzec co
-  ## `button`/`checkbox`/`textField` powyżej, żadnego nowego API.
   let btnW = h
   let labelW = w - 2 * btnW - 16
   group id & "-minus":
     box x, y, btnW, h
+    fill ColorSurface
+    cornerRadius 8
     onClick:
       valueMiB = max(minMiB, valueMiB - stepMiB)
-    rectangle id & "-minus-bg":
-      box 0, 0, btnW, h
-      fill ColorSurface
-      cornerRadius 8
     text id & "-minus-label":
       box 0, 0, btnW, h
       fill ColorText
@@ -190,12 +239,10 @@ proc sizeStepper*(id: string, x, y, w, h: float, valueMiB: var int,
                   else: $valueMiB & " MiB")
   group id & "-plus":
     box x + btnW + 8 + labelW + 8, y, btnW, h
+    fill ColorSurface
+    cornerRadius 8
     onClick:
       valueMiB = min(maxMiB, valueMiB + stepMiB)
-    rectangle id & "-plus-bg":
-      box 0, 0, btnW, h
-      fill ColorSurface
-      cornerRadius 8
     text id & "-plus-label":
       box 0, 0, btnW, h
       fill ColorText
@@ -205,11 +252,9 @@ proc sizeStepper*(id: string, x, y, w, h: float, valueMiB: var int,
 proc progressBar*(id: string, x, y, w, h: float, fraction: float) =
   group id:
     box x, y, w, h
-    rectangle id & "-track":
-      box 0, 0, w, h
-      fill ColorSurface
-      cornerRadius h / 2
-    rectangle id & "-fill":
+    fill ColorSurface
+    cornerRadius h / 2
+    group id & "-fill":
       box 0, 0, w * clamp(fraction, 0.0, 1.0), h
       fill ColorAccent
       cornerRadius h / 2
@@ -218,10 +263,8 @@ proc sidebarItem*(id, label: string, x, y, w, h: float, active, done: bool) =
   group id:
     box x, y, w, h
     if active:
-      rectangle id & "-bg":
-        box 0, 0, w, h
-        fill ColorSurface
-        cornerRadius 8
+      fill ColorSurface
+      cornerRadius 8
     text id & "-label":
       box 12, 0, w - 12, h
       fill (if done: ColorAccent elif active: ColorText else: ColorTextDim)
