@@ -235,6 +235,13 @@ proc drawWelcome(x0: float) =
   if app.launchMode == blmStandalone:
     paragraph("w-standalone", t("w_standalone_warning"), x0, y, 700, 44)
     y += 60
+  paragraph("w-theme-label", t("w_theme_label"), x0, y, 300, 22)
+  y += 30
+  choiceChip("theme-dark", t("w_theme_dark"), x0, y, 140, 40,
+    currentTheme == themeDark, proc() = applyTheme(themeDark))
+  choiceChip("theme-light", t("w_theme_light"), x0 + 150, y, 140, 40,
+    currentTheme == themeLight, proc() = applyTheme(themeLight))
+  y += 56
   button("w-start", t("btn_start"), x0, y, 200, 52, primary = true,
     onClickAction = proc() = app.step = stepLanguage)
 
