@@ -36,8 +36,10 @@ task buildRelease, "Build optimized release binary":
 task buildServer, "Build a headless binary (-d:server) -- no Fidget/OpenGL/X11 linked at all":
   exec "nim c -d:release -d:server -d:ssl --opt:speed -o:bin/installer-server src/installer.nim"
 
-task test, "Run unit tests (pure-logic helpers, no real disk access)":
+task test, "Run unit tests (pure-logic + isolated tempdir file I/O, no real disk access)":
   exec "nim c -r tests/test_diskutil.nim"
   exec "nim c -r tests/test_validation.nim"
   exec "nim c -r tests/test_partitioner.nim"
   exec "nim c -r tests/test_i18n.nim"
+  exec "nim c -r tests/test_fstab.nim"
+  exec "nim c -r tests/test_cliapp.nim"
