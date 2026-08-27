@@ -82,7 +82,9 @@
   (sh "nim c -r tests/test_diskutil.nim")
   (sh "nim c -r tests/test_validation.nim")
   (sh "nim c -r tests/test_partitioner.nim")
-  (sh "nim c -r tests/test_i18n.nim"))
+  (sh "nim c -r tests/test_i18n.nim")
+  (sh "nim c -r tests/test_fstab.nim")
+  (sh "nim c -r tests/test_cliapp.nim"))
 
 (defn task-clean []
   (sh (string "rm -rf " out-dir " nimcache nimblecache")))
