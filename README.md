@@ -6,17 +6,19 @@ renderowane wektorowo przez pixie/OpenGL -- bez zależności od GTK/Qt).
 
 Funkcje: partycjonowanie automatyczne (wymaż dysk) i ręczne (przypisanie
 istniejących partycji do ról, z walidacją unikalności i minimalnego
-rozmiaru), swap (partycja albo plik wymiany), szyfrowanie LUKS (łącznie z
-szyfrowanym swapem losowym kluczem), GRUB w trybie UEFI albo BIOS-legacy z
-autodetekcją firmware'u, subwoluminy btrfs (`@`/`@home`/`@snapshots`),
-ochrona przed wybraniem nośnika live jako celu instalacji, wykrywanie
-innych systemów (dual-boot) przez os-prober, generowanie
-`/etc/fstab`/`/etc/crypttab`, sprzątanie (odmontowanie/swapoff/luksClose)
-po nieudanej instalacji, `fstrim.timer` dla SSD, instalacja na wątku
-roboczym (GUI nie zamraża się na czas instalacji), interfejs w dwóch
-językach (polski/angielski, przełącza się razem z językiem wybranym dla
-instalowanego systemu) oraz alternatywne tryby bez GUI: tekstowy
-`--server` i w pełni bezobsługowy `--autoinstall=<plik>` (patrz niżej).
+rozmiaru), swap (partycja albo plik wymiany, konfigurowalny rozmiar),
+szyfrowanie LUKS (łącznie z szyfrowanym swapem losowym kluczem), GRUB w
+trybie UEFI albo BIOS-legacy z autodetekcją firmware'u, subwoluminy btrfs
+(`@`/`@home`/`@snapshots`), ochrona przed wybraniem nośnika live jako celu
+instalacji, wykrywanie innych systemów (dual-boot) przez os-prober,
+generowanie `/etc/fstab`/`/etc/crypttab`, sprzątanie
+(odmontowanie/swapoff/luksClose) po nieudanej instalacji, `fstrim.timer`
+dla SSD, instalacja na wątku roboczym (GUI nie zamraża się na czas
+instalacji), przełączalny motyw ciemny/jasny (czarno-złoty domyślnie),
+pełny interfejs w pięciu językach (pl/en/de/fr/es, przełącza się razem z
+językiem wybranym dla instalowanego systemu) oraz alternatywne tryby bez
+GUI: tekstowy `--server` i w pełni bezobsługowy `--autoinstall=<plik>`
+(patrz niżej).
 
 ## Skąd startuje
 
@@ -151,6 +153,33 @@ korzenia), `data/fonts/UiFont-Regular.ttf` nie zostanie znaleziony.
 Fidget i wypisuje krótki, konkretny komunikat zamiast surowego wyjątku z
 głębi biblioteki -- ale samą przyczynę (zły katalog roboczy / zły plik)
 trzeba poprawić ręcznie tak czy inaczej.
+
+### Znany problem: przyciski/pola/aktywny element paska bocznego bez napisów
+
+Zaobserwowane na żywym zrzucie ekranu z działającej binarki (nie na
+etapie kompilacji): tło elementu (przycisk, kafelek wyboru, aktywny krok
+w pasku bocznym) renderuje się poprawnie, ale napis wewnątrz -- nie.
+
+Przyczyna: pierwotna struktura tych widżetów miała osobny węzeł
+`rectangle` (tło) i `text` (napis) jako DWOJE dzieci jednej `group`, oba
+w pełni nachodzące na tę samą pozycję. Próba naprawy przez zagnieżdżenie
+tej pary w dodatkowym `frame` NIE POMOGŁA (potwierdzone kolejnym
+zrzutem ekranu) -- więc to nie jest kwestia typu kontenera (`group` vs
+`frame`), tylko samej obecności osobnego węzła `rectangle` obok `text`.
+
+Aktualna naprawa (`widgets.nim`) w ogóle nie używa osobnego `rectangle`
+do teł -- zamiast tego `fill`/`cornerRadius`/`stroke` idą BEZPOŚREDNIO na
+`group`, dokładnie tak jak w jedynym elemencie, który był potwierdzone
+poprawny na wszystkich dotychczasowych zrzutach: `group "sidebar"` w
+`app.nim` (własny `fill`, wiele dzieci typu tekst/zagnieżdżona grupa, i
+wszystko widoczne jednocześnie). Pełne uzasadnienie i historia obu prób
+są opisane w komentarzu na górze `widgets.nim`.
+
+Nadal nie mam tu środowiska graficznego do przetestowania Fidget na
+żywo -- to druga, mocniej uzasadniona próba, nie potwierdzona naprawa.
+Jeśli po przebudowaniu problem nadal występuje, to prawdopodobnie sam
+mechanizm ustawiania `fill`/`cornerRadius` (a nie obecność osobnego
+`rectangle`) jest tu czynnikiem -- zgłoś to razem ze zrzutem ekranu.
 
 ## Tryb tekstowy (`--server`)
 
@@ -337,6 +366,16 @@ tests/                                        -- testy jednostkowe czystej logik
   od ogólnej listy "wykryto inne systemy" pokazywanej przy wyborze dysku.
 * **Uprawnienia pliku `--autoinstall`.** Patrz sekcja wyżej -- ostrzeżenie
   (nie blokada), jeśli plik z hasłami jest czytelny dla grupy/innych.
+* **Sprzeczne/nieznane klucze w pliku `--autoinstall`.** Wykrywane i
+  zgłaszane PRZED instalacją: nieznany klucz (literówka), `manual_*`
+  ustawione razem z `partition_mode=erase` (ignorowane), `swap_mode`/
+  `swap_size_mib` razem z `partition_mode=manual` (ignorowane),
+  jednoczesne `manual_swap` i `manual_swapfile_mib` (pierwsze wygrywa),
+  `luks_passphrase` przy `luks=false` (ignorowane), brakująca
+  `manual_esp`/`manual_biosgrub` dla wybranego trybu rozruchu w
+  partycjonowaniu ręcznym (to jedyny z tych przypadków, który przerywa
+  instalację, nie tylko ostrzega -- prowadziłby do niebootowalnego
+  systemu). Patrz `cliapp.nim::runInstallerAutoinstall`.
 
 ## Co dalej (poza zakresem tego prototypu)
 
@@ -350,20 +389,24 @@ tests/                                        -- testy jednostkowe czystej logik
   (`GRUB_DISABLE_OS_PROBER=false`), ale samo montowanie/łączenie z
   konkretnymi wpisami menu innych systemów wciąż zostaje w gestii
   GRUB-a/os-probera, nie tego instalatora.
-* Interfejs instalatora (`i18n.nim`) ma PEŁNE tłumaczenia tylko pl/en --
-  niemiecki/francuski/hiszpański pokrywają tylko najbardziej widoczne
-  stringi (nagłówki, przyciski, etykiety kroków, główne ostrzeżenia);
-  rzadsze klucze (część promptów `--server`, komunikaty `--autoinstall`)
-  celowo spadają na angielski zamiast na zgadywane tłumaczenie
-  krytycznego komunikatu (patrz komentarz na górze `i18n.nim`). Inne
-  języki (np. polski wybrany jako en_US dla systemu) zawsze dostają
-  angielski interfejs instalatora.
-* Testy (`tests/`) pokrywają tylko czystą, bezstanową logikę
-  (`partitionPath`, `humanSize`, `parentDiskOf`, walidatory) -- kod
-  wykonujący realne operacje na dysku/chroot nie ma automatycznych testów
-  (wymagałby kontenera/VM z uprawnieniami roota do sensownego mockowania).
+* Interfejs instalatora (`i18n.nim`) ma teraz PEŁNE tłumaczenia dla
+  wszystkich 158 kluczy w 5 językach (pl/en/de/fr/es) -- 0 kluczy
+  spadających na fallback angielski. Inne języki (np. rosyjski, chiński)
+  nadal dostają angielski interfejs instalatora niezależnie od tego, jaki
+  język wybrano dla instalowanego systemu.
+* Testy (`tests/`) pokrywają czystą, bezstanową logikę (`partitionPath`,
+  `humanSize`, `parentDiskOf`, walidatory, `t()`/`setUiLanguage`) ORAZ
+  izolowane operacje plikowe w katalogach tymczasowych (`writeFstab`,
+  `parseAnswerFile`) -- ale kod wykonujący REALNE operacje na
+  dysku/partycjach/chroot (mount, mkfs, cryptsetup, grub-install) nadal
+  nie ma automatycznych testów (wymagałby kontenera/VM z uprawnieniami
+  roota i prawdziwym blokiem urządzeń do sensownego mockowania).
 * Rozmiar swapu (partycji albo pliku) jest teraz konfigurowalny w GUI
   (`widgets.sizeStepper`, krok 256 MiB) i w `--server`
   (`cliapp.askInt`) -- ale nadal krokowo/z ograniczonym zakresem
   (256 MiB-64 GiB), nie dowolna precyzyjna wartość wpisywana z klawiatury
   (patrz uzasadnienie w komentarzu `widgets.sizeStepper`).
+* Przełącznik motywu (`widgets.applyTheme`, ciemny/jasny) jest dostępny
+  tylko na ekranie powitalnym GUI -- nie ma go w trybie `--server`
+  (terminal ma własny motyw użytkownika, więc to naturalne), i nie jest
+  zapamiętywany między uruchomieniami (zawsze startuje w motywie ciemnym).
