@@ -30,6 +30,16 @@ const OptionalPackageCatalog = [
   ("steam -> flatpak", "Steam (gry)"),
 ]
 
+const KnownAnswerKeys = [
+  "language", "keyboard", "timezone",
+  "disk", "partition_mode", "bootloader", "filesystem",
+  "swap_mode", "swap_size_mib", "luks", "luks_passphrase",
+  "manual_esp", "manual_biosgrub", "manual_root", "manual_home",
+  "manual_swap", "manual_swapfile_mib",
+  "fullname", "username", "hostname", "password", "root_password", "autologin",
+  "extra_packages",
+]
+
 var echoCurrentlyDisabled = false
 
 proc restoreEchoAndExit() {.noconv.} =
@@ -111,7 +121,7 @@ proc askInt(prompt: string, default, minVal, maxVal: int): int =
       continue
     return val
 
-proc hasDuplicatePartitions(paths: openArray[string]): bool =
+proc hasDuplicatePartitions*(paths: openArray[string]): bool =
   ## Ta sama partycja przypisana do więcej niż jednej roli sformatowałaby/
   ## nadpisała dane po drodze -- używane zarówno w trybie interaktywnym,
   ## jak i przy walidacji pliku --autoinstall.
@@ -407,7 +417,7 @@ proc runInstallerCli*() =
 # nieznaną-mi-dokładnie zależność mniej) -- patrz README.md po pełną listę
 # obsługiwanych kluczy i przykładowy plik.
 
-proc parseAnswerFile(path: string): Table[string, string] =
+proc parseAnswerFile*(path: string): Table[string, string] =
   result = initTable[string, string]()
   let content = readFile(path)
   for rawLine in content.splitLines():
@@ -419,14 +429,14 @@ proc parseAnswerFile(path: string): Table[string, string] =
     let value = line[eqIdx + 1 .. ^1].strip()
     result[key] = value
 
-proc getOr(cfg: Table[string, string], key, default: string): string =
+proc getOr*(cfg: Table[string, string], key, default: string): string =
   if cfg.hasKey(key): cfg[key] else: default
 
-proc getBoolOr(cfg: Table[string, string], key: string, default: bool): bool =
+proc getBoolOr*(cfg: Table[string, string], key: string, default: bool): bool =
   if not cfg.hasKey(key): return default
   cfg[key].toLowerAscii() in ["1", "true", "tak", "yes", "t"]
 
-proc getIntOr(cfg: Table[string, string], key: string, default: int): int =
+proc getIntOr*(cfg: Table[string, string], key: string, default: int): int =
   if not cfg.hasKey(key): return default
   try:
     parseInt(cfg[key])
@@ -449,6 +459,10 @@ proc runInstallerAutoinstall*(configPath: string) =
       echo t("cli_autoinstall_perm_warn", configPath)
   except OSError:
     discard
+
+  for key in cfg.keys:
+    if key notin KnownAnswerKeys:
+      echo t("cli_autoinstall_unknown_key", key)
 
   setUiLanguage(getOr(cfg, "language", "en_US.UTF-8"))
 
@@ -475,6 +489,8 @@ proc runInstallerAutoinstall*(configPath: string) =
   let swapSizeMiB = getIntOr(cfg, "swap_size_mib", 2048)
   let useLuks = getBoolOr(cfg, "luks", false)
   let luksPassphrase = getOr(cfg, "luks_passphrase", "")
+  if not useLuks and luksPassphrase.len > 0:
+    echo t("cli_autoinstall_warn_luks_passphrase_ignored")
 
   var manual = ManualPartitionAssignment(formatEsp: true, formatRoot: true, formatHome: true)
   manual.espPart = getOr(cfg, "manual_esp", "")
@@ -485,12 +501,25 @@ proc runInstallerAutoinstall*(configPath: string) =
   manual.swapFileSizeMiB = getIntOr(cfg, "manual_swapfile_mib", 0)
 
   if partitionMode == pmEraseDisk:
+    if manual.espPart.len > 0 or manual.biosGrubPart.len > 0 or manual.rootPart.len > 0 or
+       manual.homePart.len > 0 or manual.swapPart.len > 0 or manual.swapFileSizeMiB > 0:
+      echo t("cli_autoinstall_warn_ignored_manual")
     if disk.sizeBytes < MinInstallDiskSizeBytes:
       echo t("cli_autoinstall_too_small", humanSize(MinInstallDiskSizeBytes))
       return
   else:
+    if cfg.hasKey("swap_mode") or cfg.hasKey("swap_size_mib"):
+      echo t("cli_autoinstall_warn_ignored_swap")
+    if manual.swapPart.len > 0 and manual.swapFileSizeMiB > 0:
+      echo t("cli_autoinstall_warn_swap_conflict")
     if manual.rootPart.len == 0:
       echo t("cli_autoinstall_manual_root_missing")
+      return
+    if bootloaderMode == bmUefi and manual.espPart.len == 0:
+      echo t("cli_autoinstall_missing_boot_role", "UEFI", "esp")
+      return
+    if bootloaderMode == bmBiosLegacy and manual.biosGrubPart.len == 0:
+      echo t("cli_autoinstall_missing_boot_role", "BIOS", "biosgrub")
       return
     # Partycje wskazane w pliku odpowiedzi muszą leżeć na dysku z disk=,
     # inaczej literówka mogłaby pomieszać partycje z dwóch różnych dysków.
