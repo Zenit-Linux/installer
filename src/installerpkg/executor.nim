@@ -1,4 +1,5 @@
 import std/typedthreads
+import std/strutils
 import ./types
 import ./partitioner
 import ./zpmclient
@@ -13,11 +14,12 @@ const TargetMount = "/mnt/zenit-target"
 const StepWeights = [
   ("Partycjonowanie dysku", 10.0),
   ("Inicjalizacja zpm", 5.0),
-  ("Instalacja systemu bazowego", 40.0),
-  ("Instalacja dodatkowych pakietów", 15.0),
+  ("Instalacja systemu bazowego", 35.0),
+  ("Instalacja środowiska graficznego", 15.0),
+  ("Instalacja dodatkowych pakietów", 10.0),
   ("Konfiguracja lokalizacji i konta", 10.0),
   ("Zapis /etc/fstab", 3.0),
-  ("Instalacja bootloadera", 10.0),
+  ("Instalacja bootloadera", 5.0),
   ("Sprzątanie", 7.0),
 ]
 
@@ -30,6 +32,14 @@ proc report(cb: ProgressCallback, stepIdx: int, status: StepStatus, logLine = ""
 
 proc baseSystemPackages(): seq[string] =
   @["base", "linux", "linux-firmware", "systemd", "zenit-init", "networkmanager", "grub", "efibootmgr"]
+
+proc desktopMetaPackage(desktopId: string): string =
+  ## Konwencja opisana w `zlbpkg/installerconfig.nim` (repo `zlb`): każdy
+  ## wpis `installer.desktops` (poza "none") odpowiada metapakietowi
+  ## "zenit-desktop-<id>" (backend `own`), który zpm rozwija na pełny
+  ## zestaw pakietów danego środowiska. `""`/"none" (bez GUI) zwraca pusty
+  ## string -- wywołujący (runInstall, krok 3) pomija instalację w tym przypadku.
+  "zenit-desktop-" & desktopId
 
 proc runInstall*(plan: InstallPlan, distroName: string, cb: ProgressCallback = nil) =
   # `mounted` musi być zadeklarowane PRZED `try`, żeby handler `except` niżej
@@ -60,21 +70,30 @@ proc runInstall*(plan: InstallPlan, distroName: string, cb: ProgressCallback = n
       raise newException(InstallerError, "Instalacja systemu bazowego nie powiodła się")
     report(cb, 2, ssDone)
 
-    # 3. Dodatkowe pakiety --------------------------------------------------
+    # 3. Środowisko graficzne -------------------------------------------------
     report(cb, 3, ssRunning)
-    if plan.extraPackages.len > 0:
-      discard zpmInstallTarget(TargetMount, plan.extraPackages, "",
-                                proc(l: string) {.closure, gcsafe.} = report(cb, 3, ssRunning, l))
+    if plan.desktop.len > 0 and plan.desktop.toLowerAscii != "none":
+      if not zpmInstallTarget(TargetMount, @[desktopMetaPackage(plan.desktop)], "",
+                               proc(l: string) {.closure, gcsafe.} = report(cb, 3, ssRunning, l)):
+        raise newException(InstallerError,
+          "Instalacja środowiska graficznego '" & plan.desktop & "' nie powiodła się")
     report(cb, 3, ssDone)
 
-    # 4. Lokalizacja + konto -------------------------------------------------
+    # 4. Dodatkowe pakiety --------------------------------------------------
     report(cb, 4, ssRunning)
-    applyLocale(TargetMount, plan.locale)
-    applyAccount(TargetMount, plan.account)
+    if plan.extraPackages.len > 0:
+      discard zpmInstallTarget(TargetMount, plan.extraPackages, "",
+                                proc(l: string) {.closure, gcsafe.} = report(cb, 4, ssRunning, l))
     report(cb, 4, ssDone)
 
-    # 5. fstab + crypttab ----------------------------------------------------
+    # 5. Lokalizacja + konto -------------------------------------------------
     report(cb, 5, ssRunning)
+    applyLocale(TargetMount, plan.locale)
+    applyAccount(TargetMount, plan.account)
+    report(cb, 5, ssDone)
+
+    # 6. fstab + crypttab ----------------------------------------------------
+    report(cb, 6, ssRunning)
     var fstabEntries: seq[FstabEntry] = @[]
     for m in mounted:
       if m.mountpoint == "none": continue # swap dopisywane osobno niżej
@@ -93,10 +112,10 @@ proc runInstall*(plan: InstallPlan, distroName: string, cb: ProgressCallback = n
         writeCrypttab(TargetMount, m.devicePath)
       elif m.fsType == "swap":
         writeSwapCrypttab(TargetMount, m.devicePath)
-    report(cb, 5, ssDone)
+    report(cb, 6, ssDone)
 
-    # 6. Bootloader -----------------------------------------------------------
-    report(cb, 6, ssRunning)
+    # 7. Bootloader -----------------------------------------------------------
+    report(cb, 7, ssRunning)
     var otherOses: seq[string] = @[]
     try:
       otherOses = detectOtherOperatingSystems()
@@ -107,16 +126,16 @@ proc runInstall*(plan: InstallPlan, distroName: string, cb: ProgressCallback = n
       useLuks = plan.partition.useLuksEncryption,
       enableOsProber = otherOses.len > 0)
     enableSsdMaintenance(TargetMount, plan.partition.targetDisk)
-    report(cb, 6, ssDone)
+    report(cb, 7, ssDone)
 
-    # 7. Sprzątanie -------------------------------------------------------
-    report(cb, 7, ssRunning)
+    # 8. Sprzątanie -------------------------------------------------------
+    report(cb, 8, ssRunning)
     discard zpmSyncTarget(TargetMount)
     var swapParts: seq[string] = @[]
     for m in mounted:
       if m.fsType == "swap" and m.fstabDevice.len > 0: swapParts.add m.fstabDevice
     unmountTarget(TargetMount, plan.partition.useLuksEncryption, swapParts)
-    report(cb, 7, ssDone)
+    report(cb, 8, ssDone)
 
   except InstallerError as e:
     # Best-effort sprzątanie -- jeśli partycjonowanie (krok 0) się udało, ale
