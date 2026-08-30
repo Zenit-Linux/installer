@@ -1,4 +1,4 @@
-import std/[unittest, os]
+import std/[unittest, os, strutils]
 import ../src/installerpkg/fstab
 
 suite "fstab":
