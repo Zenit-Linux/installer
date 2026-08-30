@@ -10,6 +10,7 @@ binDir        = "bin"
 requires "nim >= 2.0.0"
 requires "fidget >= 0.4.0"   # immediate-mode UI (treeform/fidget) -- lekki, nowoczesny,
                               # renderowany wektorowo przez OpenGL/pixie, bez zależności od GTK/Qt
+requires "hcl_nim >= 0.1"
 
 # --- Zależność na `opengl` --------------------------------------------
 # UWAGA: ostatnie wydania paczki nimble `opengl` (m.in. commit taggowany
