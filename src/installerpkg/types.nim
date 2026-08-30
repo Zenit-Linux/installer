@@ -2,7 +2,7 @@ type
   InstallerError* = object of CatchableError
 
   WizardStep* = enum
-    stepWelcome, stepLanguage, stepKeyboard, stepNetwork,
+    stepWelcome, stepLanguage, stepKeyboard, stepNetwork, stepDesktop,
     stepDisk, stepPartition, stepManualPartitions, stepAccount, stepSummary,
     stepInstalling, stepDone, stepError
 
@@ -101,6 +101,13 @@ type
     locale*: LocaleChoice
     partition*: PartitionPlan
     account*: UserAccount
+    desktop*: string             ## id wybranego środowiska graficznego z
+                                  ## RunnerConfig.desktops (patrz config.nim),
+                                  ## "" albo "none" = instalacja bez GUI.
+                                  ## Instalowane POST-partycjonowaniu jako
+                                  ## metapakiet "zenit-desktop-<id>" (patrz
+                                  ## executor.nim::installDesktopEnvironment) --
+                                  ## konwencja opisana w zlb::installerconfig.nim.
     extraPackages*: seq[string]  ## dodatkowe pakiety wybrane przez użytkownika
                                   ## (instalowane przez zpm, patrz zpmclient.nim)
 
@@ -121,6 +128,37 @@ type
     blmLiveOnly       ## boot=zenit bez installer=1 -- zwykła sesja live
     blmInstallerAuto  ## boot=zenit installer=1 -- pełnoekranowy instalator od razu
     blmStandalone      ## uruchomiony ręcznie z zainstalowanego systemu (reinstall/recovery)
+
+  RunnerConfig* = object
+    ## Odpowiednik `InstallerConfig` z `zlbpkg/installerconfig.nim` w repo
+    ## `zlb` -- ale wczytywany W TRAKCIE DZIAŁANIA instalatora (nie w
+    ## trakcie budowania obrazu). Źródło: plik osadzony przez
+    ## `zlbpkg/rootfs.nim::embedInstallerConfig` pod ścieżką
+    ## `RunnerConfigPath` (ten sam `installer/config.hcl`, ten sam
+    ## `branding {}`), parsowany tym samym parserem `hcl-nim`. Brak pliku
+    ## (np. instalator uruchomiony poza obrazem Zenit, do developmentu)
+    ## nie jest błędem -- `loadRunnerConfig` zwraca wtedy sensowne
+    ## wartości domyślne z `present = false`.
+    present*: bool
+    desktopSelector*: bool
+    desktops*: seq[string]
+    defaultDesktop*: string
+    defaultLocale*: string
+    locales*: seq[string]
+    allowManualPartitioning*: bool
+    title*: string
+    brandingIconPath*: string    ## ścieżka ABSOLUTNA (już rozwiązana względem
+                                  ## RunnerBrandingDir), pusta jeśli plik nie
+                                  ## istnieje na dysku mimo wpisu w configu
+    brandingBannerPath*: string
+
+const
+  RunnerConfigPath* = "/etc/zenit/installer/config.hcl"
+    ## MUSI być identyczne z `types.InstallerEmbeddedConfigPath` (z
+    ## wiodącym '/') w repo `zlb` -- to jest jedyne miejsce w tym repo,
+    ## gdzie ta ścieżka jest zakodowana na stałe.
+  RunnerBrandingDir* = "/usr/share/zenit/branding"
+    ## Jw., dla `InstallerEmbeddedBrandingDir` w repo `zlb`.
 
 const
   MinInstallDiskSizeBytes* = 8_589_934_592'i64   # 8 GiB -- minimalny sensowny cel instalacji
