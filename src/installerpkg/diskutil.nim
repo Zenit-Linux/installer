@@ -3,17 +3,20 @@ import ./types
 
 proc parentDiskOf*(partition: string): string =
   ## /dev/sda1 -> /dev/sda ; /dev/nvme0n1p1 -> /dev/nvme0n1 ;
-  ## /dev/mmcblk0p2 -> /dev/mmcblk0 ; już-dysk (bez cyfry na końcu) zostaje
-  ## bez zmian.
+  ## /dev/mmcblk0p2 -> /dev/mmcblk0 ; już-dysk (bez cyfry na końcu, albo
+  ## nvme-owy dysk postaci nvme<N>n<M> bez partycyjnego 'p') zostaje bez zmian.
   if partition.len == 0 or not partition[^1].isDigit:
     return partition
   var i = partition.len - 1
   while i >= 0 and partition[i].isDigit:
     dec i
   if i >= 1 and partition[i] == 'p' and partition[i - 1].isDigit:
-    partition[0 ..< i]
-  else:
-    partition[0 .. i]
+    return partition[0 ..< i]
+  if i >= 1 and partition[i] == 'n' and partition[i - 1].isDigit:
+    # np. "/dev/nvme0n1" bez partycyjnego 'p' -- to już CAŁY dysk (numer po
+    # 'n' to numer namespace'u NVMe, nie partycji), nie ma czego ucinać.
+    return partition
+  partition[0 .. i]
 
 proc detectLiveMediumDisks*(): seq[string] =
   ## Best-effort: dyski, na których leży aktualnie zamontowany nośnik/root
@@ -112,7 +115,7 @@ proc humanSize*(bytes: BiggestInt): string =
   while val >= 1024.0 and i < units.high:
     val /= 1024.0
     inc i
-  result = val.formatFloat(precision = 1) & " " & units[i]
+  result = val.formatFloat(format = ffDecimal, precision = 1) & " " & units[i]
 
 proc detectFirmwareMode*(): BootloaderMode =
   ## Autodetekcja: jeśli /sys/firmware/efi istnieje, sesja live wystartowała
