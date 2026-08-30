@@ -6,6 +6,8 @@ import ./executor
 import ./validation
 import ./liveenv
 import ./i18n
+import ./config
+import ./desktops
 
 const DistroName = "Zenit Linux"
 
@@ -37,7 +39,7 @@ const KnownAnswerKeys = [
   "manual_esp", "manual_biosgrub", "manual_root", "manual_home",
   "manual_swap", "manual_swapfile_mib",
   "fullname", "username", "hostname", "password", "root_password", "autologin",
-  "extra_packages",
+  "extra_packages", "desktop",
 ]
 
 var echoCurrentlyDisabled = false
@@ -174,6 +176,32 @@ proc chooseDisk(disks: seq[DiskInfo]): DiskInfo =
       continue
     return disk
 
+proc chooseDesktopCli(cfg: RunnerConfig): string =
+  ## Ekran wyboru środowiska graficznego w trybie TTY. Zwraca "" (bez GUI),
+  ## jeśli obraz nie definiuje żadnego środowiska w installer/config.hcl
+  ## (`cfg.present == false` albo `cfg.desktops.len == 0`) -- instalacja
+  ## bez GUI to wtedy jedyna opcja, więc nie ma sensu pytać.
+  if not cfg.present or cfg.desktops.len == 0:
+    return ""
+  echo ""
+  echo t("de_title")
+  echo t("de_body")
+  let options = availableDesktops(cfg)
+  var labels: seq[string] = @[]
+  for o in options:
+    if o == "none":
+      labels.add t("de_none")
+    else:
+      let info = findDesktopInfo(o)
+      labels.add (if info.placeholder: info.displayName & " " & t("de_placeholder_tag") else: info.displayName)
+  var defaultIdx = 0
+  if cfg.defaultDesktop.len > 0:
+    let found = options.find(cfg.defaultDesktop)
+    if found >= 0: defaultIdx = found
+  let idx = askChoice(t("de_title"), labels)
+  result = options[idx]
+  discard defaultIdx  # zachowane dla ewentualnego przyszłego "[domyślne]" znacznika w etykiecie
+
 proc runInstallerCli*() =
   if detectBootLaunchMode() == blmStandalone:
     echo t("w_standalone_warning")
@@ -198,6 +226,9 @@ proc runInstallerCli*() =
     if not askYesNo(t("n_continue_anyway"), false):
       echo t("cli_aborted")
       return
+
+  let runnerCfg = loadRunnerConfig()
+  let chosenDesktop = chooseDesktopCli(runnerCfg)
 
   let disks = listDisks()
   if disks.len == 0:
@@ -379,6 +410,7 @@ proc runInstallerCli*() =
       autoLogin: autoLogin,
     ),
     extraPackages: extraPackages,
+    desktop: chosenDesktop,
   )
 
   let swapLabel =
@@ -394,6 +426,8 @@ proc runInstallerCli*() =
     filesystem, (if bootloaderMode == bmUefi: t("p_boot_uefi") else: t("p_boot_bios")))
   echo "  " & t("s_security", (if useLuks: t("val_on") else: t("val_off")), swapLabel)
   echo "  " & t("s_user", username, fullName, hostname)
+  if chosenDesktop.len > 0:
+    echo "  " & t("s_desktop", (if chosenDesktop == "none": t("de_none") else: chosenDesktop))
   if otherOses.len > 0:
     echo "  " & t("s_dualboot", otherOses.join(", "))
   echo ""
@@ -548,6 +582,14 @@ proc runInstallerAutoinstall*(configPath: string) =
     for p in extraRaw.split(','):
       let trimmed = p.strip()
       if trimmed.len > 0: extraPackages.add trimmed
+
+  let runnerCfg = loadRunnerConfig()
+  let desktopWanted = getOr(cfg, "desktop", "")
+  if desktopWanted.len > 0 and runnerCfg.present and runnerCfg.desktops.len > 0:
+    let available = availableDesktops(runnerCfg)
+    if desktopWanted notin available:
+      echo t("cli_autoinstall_disk_missing", desktopWanted)  # komunikat generyczny "brak X w dostępnych" -- patrz i18n
+      return
 
   let plan = InstallPlan(
     locale: LocaleChoice(
