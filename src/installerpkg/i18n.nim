@@ -1,6 +1,6 @@
 import std/[tables, strutils]
 
-type UiLang* = enum langPl, langEn, langDe, langFr, langEs
+type UiLang* = enum langPl, langEn, langDe, langFr, langEs, langIt, langUk
 
 var currentLang*: UiLang = langPl
 
@@ -19,6 +19,7 @@ const entries = [
   ("nav_language", "Język", "Language"),
   ("nav_keyboard", "Klawiatura", "Keyboard"),
   ("nav_network", "Sieć", "Network"),
+  ("nav_desktop", "Środowisko graficzne", "Desktop environment"),
   ("nav_disk", "Dysk", "Disk"),
   ("nav_partition", "Partycjonowanie", "Partitioning"),
   ("nav_account", "Konto", "Account"),
@@ -65,6 +66,22 @@ const entries = [
     "No connection -- installing packages via zpm may fail."),
   ("n_continue_anyway", "Kontynuować bez potwierdzonego połączenia?",
     "Continue without confirmed connectivity?"),
+
+  # -- wybór środowiska graficznego --------------------------------------------
+  ("de_title", "Wybierz środowisko graficzne", "Choose a desktop environment"),
+  ("de_body",
+    "Możesz wybrać środowisko graficzne do zainstalowania, albo zainstalować " &
+    "system bez GUI (przydatne dla serwerów/kontenerów). Wybrane środowisko " &
+    "jest instalowane przez zpm, tak samo jak reszta pakietów.",
+    "You can choose a desktop environment to install, or install the system " &
+    "without a GUI (useful for servers/containers). The chosen environment " &
+    "is installed through zpm, just like every other package."),
+  ("de_none", "Bez środowiska graficznego (serwer/minimalny)", "No desktop environment (server/minimal)"),
+  ("de_unavailable",
+    "Ten obraz nie udostępnia wyboru środowiska graficznego (installer/config.hcl go nie definiuje).",
+    "This image doesn't offer a desktop environment choice (installer/config.hcl doesn't define one)."),
+  ("de_placeholder_tag", "(zapowiedź -- niepełne pakiety)", "(preview -- incomplete packages)"),
+  ("s_desktop", "Środowisko graficzne: $1", "Desktop environment: $1"),
 
   # -- dysk -------------------------------------------------------------------
   ("d_title", "Wybierz dysk docelowy", "Choose the target disk"),
@@ -336,6 +353,7 @@ const extraTranslations = [
   ("nav_language", "Sprache", "Langue", "Idioma"),
   ("nav_keyboard", "Tastatur", "Clavier", "Teclado"),
   ("nav_network", "Netzwerk", "Réseau", "Red"),
+  ("nav_desktop", "Desktop-Umgebung", "Environnement de bureau", "Entorno de escritorio"),
   ("nav_disk", "Laufwerk", "Disque", "Disco"),
   ("nav_partition", "Partitionierung", "Partitionnement", "Particionado"),
   ("nav_account", "Konto", "Compte", "Cuenta"),
@@ -395,6 +413,30 @@ const extraTranslations = [
     "Sin conexión -- la instalación de paquetes vía zpm podría fallar."),
   ("n_continue_anyway", "Ohne bestätigte Verbindung fortfahren?",
     "Continuer sans connexion confirmée ?", "¿Continuar sin conexión confirmada?"),
+
+  ("de_title", "Desktop-Umgebung wählen", "Choisissez un environnement de bureau", "Elija un entorno de escritorio"),
+  ("de_body",
+    "Sie können eine zu installierende Desktop-Umgebung wählen oder das " &
+    "System ohne GUI installieren (nützlich für Server/Container). Die " &
+    "gewählte Umgebung wird wie jedes andere Paket über zpm installiert.",
+    "Vous pouvez choisir un environnement de bureau à installer, ou " &
+    "installer le système sans interface graphique (utile pour les " &
+    "serveurs/conteneurs). L'environnement choisi est installé via zpm, " &
+    "comme tout autre paquet.",
+    "Puede elegir un entorno de escritorio para instalar, o instalar el " &
+    "sistema sin interfaz gráfica (útil para servidores/contenedores). El " &
+    "entorno elegido se instala mediante zpm, como cualquier otro paquete."),
+  ("de_none", "Ohne Desktop-Umgebung (Server/minimal)", "Sans environnement de bureau (serveur/minimal)",
+    "Sin entorno de escritorio (servidor/mínimo)"),
+  ("de_unavailable",
+    "Dieses Abbild bietet keine Auswahl der Desktop-Umgebung " &
+    "(installer/config.hcl definiert keine).",
+    "Cette image ne propose pas de choix d'environnement de bureau " &
+    "(installer/config.hcl n'en définit aucun).",
+    "Esta imagen no ofrece elección de entorno de escritorio " &
+    "(installer/config.hcl no define ninguno)."),
+  ("de_placeholder_tag", "(Vorschau -- unvollständige Pakete)", "(aperçu -- paquets incomplets)", "(vista previa -- paquetes incompletos)"),
+  ("s_desktop", "Desktop-Umgebung: $1", "Environnement de bureau : $1", "Entorno de escritorio: $1"),
 
   ("d_title", "Zieldatenträger wählen", "Choisissez le disque cible", "Elija el disco de destino"),
   ("d_empty", "Keine Laufwerke gefunden (lsblk fehlt oder kein Medium vorhanden).",
@@ -721,15 +763,119 @@ for e in extraTranslations:
   frDict[e[0]] = e[2]
   esDict[e[0]] = e[3]
 
+# -- włoski/ukraiński: świadomie WĘŻSZY zestaw (patrz wyjaśnienie zakresu
+# na górze pliku) -- (key, it, uk). Rozszerzanie tego zestawu o kolejne
+# klucze jest zawsze bezpieczne, `t()` spada na angielski dla braków.
+const extraTranslationsCore = [
+  ("nav_welcome", "Benvenuto", "Ласкаво просимо"),
+  ("nav_language", "Lingua", "Мова"),
+  ("nav_keyboard", "Tastiera", "Клавіатура"),
+  ("nav_network", "Rete", "Мережа"),
+  ("nav_desktop", "Ambiente desktop", "Стільничне середовище"),
+  ("nav_disk", "Disco", "Диск"),
+  ("nav_partition", "Partizionamento", "Розмітка диска"),
+  ("nav_account", "Account", "Обліковий запис"),
+  ("nav_summary", "Riepilogo", "Підсумок"),
+
+  ("btn_back", "Indietro", "Назад"),
+  ("btn_next", "Avanti", "Далі"),
+  ("btn_start", "Avvia", "Почати"),
+  ("btn_install", "Installa", "Встановити"),
+  ("btn_reboot", "Riavvia", "Перезавантажити"),
+  ("btn_check_connection", "Verifica connessione", "Перевірити з'єднання"),
+  ("btn_back_to_summary", "Torna al riepilogo", "Повернутися до підсумку"),
+
+  ("w_title", "Benvenuto nel programma di installazione di $1", "Вітаємо у програмі встановлення $1"),
+  ("w_body",
+    "Questa procedura guidata ti accompagnerà nell'installazione di $1 su " &
+    "questo computer. Tutti i pacchetti -- il sistema di base e il software " &
+    "opzionale -- vengono installati tramite zpm, mai con un singolo script curl.",
+    "Цей майстер проведе вас через встановлення $1 на цьому комп'ютері. " &
+    "Усі пакунки -- базова система та додаткове програмне забезпечення -- " &
+    "встановлюються через zpm, а не одним скриптом curl."),
+  ("w_standalone_warning",
+    "Il programma di installazione è in esecuzione su un sistema già " &
+    "installato (modalità reinstallazione/ripristino) -- continuare " &
+    "sovrascriverà il disco selezionato.",
+    "Встановлювач запущено в уже встановленій системі (режим " &
+    "перевстановлення/відновлення) -- продовження перезапише вибраний диск."),
+
+  ("l_title", "Scegli la lingua del sistema", "Виберіть мову системи"),
+
+  ("k_title", "Tastiera e fuso orario", "Клавіатура та часовий пояс"),
+  ("k_kb_label", "Layout tastiera", "Розкладка клавіатури"),
+  ("k_tz_label", "Fuso orario", "Часовий пояс"),
+
+  ("n_title", "Connessione di rete", "Мережеве з'єднання"),
+  ("n_result_ok", "La connessione funziona.", "З'єднання працює."),
+  ("n_result_fail",
+    "Nessuna connessione -- l'installazione dei pacchetti tramite zpm potrebbe fallire.",
+    "Немає з'єднання -- встановлення пакунків через zpm може завершитися помилкою."),
+  ("n_continue_anyway", "Continuare senza connessione confermata?", "Продовжити без підтвердженого з'єднання?"),
+
+  ("de_title", "Scegli un ambiente desktop", "Виберіть стільничне середовище"),
+  ("de_body",
+    "Puoi scegliere un ambiente desktop da installare, oppure installare " &
+    "il sistema senza interfaccia grafica (utile per server/container). " &
+    "L'ambiente scelto viene installato tramite zpm, come ogni altro pacchetto.",
+    "Ви можете вибрати стільничне середовище для встановлення, або " &
+    "встановити систему без графічного інтерфейсу (корисно для " &
+    "серверів/контейнерів). Обране середовище встановлюється через zpm, " &
+    "як і будь-який інший пакунок."),
+  ("de_none", "Senza ambiente desktop (server/minimo)", "Без стільничного середовища (сервер/мінімум)"),
+  ("de_unavailable",
+    "Questa immagine non offre la scelta dell'ambiente desktop " &
+    "(installer/config.hcl non ne definisce nessuno).",
+    "Цей образ не пропонує вибір стільничного середовища " &
+    "(installer/config.hcl його не визначає)."),
+  ("de_placeholder_tag", "(anteprima -- pacchetti incompleti)", "(попередній перегляд -- неповні пакунки)"),
+  ("s_desktop", "Ambiente desktop: $1", "Стільничне середовище: $1"),
+
+  ("d_title", "Scegli il disco di destinazione", "Виберіть цільовий диск"),
+  ("d_empty", "Nessun disco trovato (lsblk mancante o nessun supporto presente).",
+    "Диски не знайдено (lsblk відсутній або немає носія)."),
+  ("d_too_small", "Il disco selezionato è troppo piccolo (minimo $1).",
+    "Вибраний диск занадто малий (мінімум $1)."),
+  ("d_live_warning",
+    "ATTENZIONE: questo sembra essere il supporto da cui è in esecuzione " &
+    "questa sessione live. Selezionarlo come destinazione probabilmente " &
+    "danneggerà la sessione corrente.",
+    "УВАГА: схоже, це носій, з якого запущено цей живий сеанс. Вибір його " &
+    "як цілі встановлення, ймовірно, пошкодить поточний сеанс."),
+  ("d_live_confirm", "Capisco il rischio, questo è il disco giusto", "Я розумію ризик, це правильний диск"),
+  ("tag_removable", " [rimovibile]", " [знімний]"),
+  ("tag_live", " [SUPPORTO LIVE]", " [ЖИВИЙ НОСІЙ]"),
+
+  ("p_title", "Partizionamento", "Розмітка диска"),
+
+  ("a_title", "Crea account utente", "Створіть обліковий запис користувача"),
+  ("a_username", "Nome utente", "Ім'я користувача"),
+  ("a_password", "Password", "Пароль"),
+  ("a_hostname", "Nome host", "Ім'я хоста"),
+
+  ("cli_summary_title", "Riepilogo:", "Підсумок:"),
+
+  ("i_title", "Installazione di $1 in corso...", "Встановлення $1 триває..."),
+  ("done_title", "Installazione completata!", "Встановлення завершено!"),
+  ("err_title", "Installazione non riuscita", "Встановлення не вдалося"),
+]
+
+var itDict = initTable[string, string]()
+var ukDict = initTable[string, string]()
+for e in extraTranslationsCore:
+  itDict[e[0]] = e[1]
+  ukDict[e[0]] = e[2]
+
 proc t*(key: string, args: varargs[string]): string {.gcsafe.} =
   ## Tłumaczy `key` na aktualny `currentLang`. Dla de/fr/es brakujący klucz
   ## spada na angielski (a nie na sam klucz) -- patrz wyjaśnienie zakresu
   ## tłumaczeń na górze pliku. `args` podstawiane są pod $1/$2/... (patrz
   ## std/strutils `%`).
   ##
-  ## `{.cast(gcsafe).}` niżej: plDict/enDict/deDict/frDict/esDict/currentLang
-  ## są globalnymi `var` (GC'owana pamięć), więc domyślny analizator
-  ## gcsafe Nima nie potrafi udowodnić, że dostęp do nich jest bezpieczny --
+  ## `{.cast(gcsafe).}` niżej: plDict/enDict/deDict/frDict/esDict/itDict/
+  ## ukDict/currentLang są globalnymi `var` (GC'owana pamięć), więc domyślny
+  ## analizator gcsafe Nima nie potrafi udowodnić, że dostęp do nich jest
+  ## bezpieczny --
   ## a musi to udowodnić, bo `t` jest wołane m.in. z `onProgress` w
   ## cliapp.nim, które z kolei musi być `{.gcsafe.}`, żeby pasować do typu
   ## `ProgressCallback` (patrz types.nim). W praktyce JEST to bezpieczne:
@@ -749,13 +895,15 @@ proc t*(key: string, args: varargs[string]): string {.gcsafe.} =
           of langDe: deDict.getOrDefault(key, enDict.getOrDefault(key, key))
           of langFr: frDict.getOrDefault(key, enDict.getOrDefault(key, key))
           of langEs: esDict.getOrDefault(key, enDict.getOrDefault(key, key))
+          of langIt: itDict.getOrDefault(key, enDict.getOrDefault(key, key))
+          of langUk: ukDict.getOrDefault(key, enDict.getOrDefault(key, key))
     r
   if args.len == 0: raw else: raw % @args
 
 proc setUiLanguage*(languageTag: string) {.gcsafe.} =
   ## `languageTag` to kod locale wybrany dla INSTALOWANEGO systemu (np.
   ## "pl_PL.UTF-8") -- interfejs instalatora przełącza się na odpowiedni
-  ## język dla pl/en/de/fr/es, w każdym innym przypadku na angielski.
+  ## język dla pl/en/de/fr/es/it/uk, w każdym innym przypadku na angielski.
   ## `{.cast(gcsafe).}` -- patrz wyjaśnienie w komentarzu `t()` wyżej;
   ## dotyczy tu tylko przypisania do `currentLang`.
   {.cast(gcsafe).}:
@@ -765,4 +913,6 @@ proc setUiLanguage*(languageTag: string) {.gcsafe.} =
       of "de_DE.UTF-8": langDe
       of "fr_FR.UTF-8": langFr
       of "es_ES.UTF-8": langEs
+      of "it_IT.UTF-8": langIt
+      of "uk_UA.UTF-8": langUk
       else: langEn
