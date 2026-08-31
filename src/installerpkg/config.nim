@@ -1,6 +1,6 @@
 import std/[os, strutils]
 import ./types
-import ./hclnim as impl
+import ./hclcore as impl
 import ./desktops
 
 const AllDesktopsSentinel = "all"
