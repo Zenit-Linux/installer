@@ -8,6 +8,8 @@ import ./netcheck
 import ./validation
 import ./i18n
 import ./widgets
+import ./config
+import ./desktops
 
 const DistroName = "Zenit Linux"
 const WindowW = 1280.0
@@ -50,6 +52,13 @@ type
 
     networkChecked: bool
     networkOk: bool
+
+    runnerConfig: RunnerConfig
+    desktopOptions: seq[string]   ## puste = ten obraz nie oferuje wyboru DE
+                                    ## (patrz `config.availableDesktops`) --
+                                    ## krok stepDesktop jest wtedy pomijany,
+                                    ## tak samo jak w cliapp.chooseDesktopCli.
+    selectedDesktopIdx: int
 
     disks: seq[DiskInfo]
     selectedDiskIdx: int
@@ -105,6 +114,7 @@ var app = AppState(
   manualHomeIdx: -1,
   manualSwapIdx: -1,
   manualSwapFileSizeMiB: DefaultSwapSizeMiB,
+  selectedDesktopIdx: -1,
 )
 
 proc stepIndex(s: WizardStep): int =
@@ -113,16 +123,35 @@ proc stepIndex(s: WizardStep): int =
   of stepLanguage: 1
   of stepKeyboard: 2
   of stepNetwork: 3
-  of stepDisk: 4
-  of stepPartition: 5
-  of stepManualPartitions: 5 # ta sama pozycja w pasku bocznym co "Partycjonowanie"
-  of stepAccount: 6
-  of stepSummary: 7
-  else: 8
+  of stepDesktop: 4
+  of stepDisk: 5
+  of stepPartition: 6
+  of stepManualPartitions: 6 # ta sama pozycja w pasku bocznym co "Partycjonowanie"
+  of stepAccount: 7
+  of stepSummary: 8
+  else: 9
 
-proc stepTitles(): array[8, string] =
+proc stepTitles(): array[9, string] =
   [t("nav_welcome"), t("nav_language"), t("nav_keyboard"), t("nav_network"),
-   t("nav_disk"), t("nav_partition"), t("nav_account"), t("nav_summary")]
+   t("nav_desktop"), t("nav_disk"), t("nav_partition"), t("nav_account"), t("nav_summary")]
+
+proc chosenDesktop(): string =
+  ## Id wybranego środowiska graficznego, albo "" jeśli ten obraz w ogóle
+  ## nie oferuje wyboru (stepDesktop był pominięty) -- ten sam kształt co
+  ## `cliapp.chooseDesktopCli`, tylko czytany ze stanu GUI zamiast pytań
+  ## na TTY.
+  if app.desktopOptions.len == 0: return ""
+  if app.selectedDesktopIdx < 0 or app.selectedDesktopIdx >= app.desktopOptions.len:
+    return ""
+  app.desktopOptions[app.selectedDesktopIdx]
+
+proc desktopOptionLabel(id: string): string =
+  if id == "none":
+    t("de_none")
+  else:
+    let info = findDesktopInfo(id)
+    if info.placeholder: info.displayName & " " & t("de_placeholder_tag")
+    else: info.displayName
 
 proc manualSelectionsUnique(): bool =
   ## Ta sama partycja przypisana do więcej niż jednej roli sformatowałaby/
@@ -188,7 +217,8 @@ proc buildPlan(): InstallPlan =
       var pkgs: seq[string] = @[]
       for i, sel in app.selectedPackages:
         if sel: pkgs.add OptionalPackageCatalog[i][0]
-      pkgs
+      pkgs,
+    desktop: chosenDesktop(),
   )
 
 proc startInstall() =
@@ -292,7 +322,37 @@ proc drawNetwork(x0: float) =
       except CatchableError:
         app.otherOses = @[]
       app.otherOsesChecked = true
-      app.step = stepDisk)
+
+      # Ekran wyboru środowiska graficznego -- ten sam warunek pomijania co
+      # `cliapp.chooseDesktopCli`: brak installer/config.hcl w obrazie albo
+      # pusta lista `installer.desktops` oznacza instalację bez GUI jako
+      # jedyną opcję, więc nie ma sensu pytać.
+      app.runnerConfig = loadRunnerConfig()
+      if app.runnerConfig.present and app.runnerConfig.desktops.len > 0:
+        app.desktopOptions = availableDesktops(app.runnerConfig)
+        app.selectedDesktopIdx = 0
+        if app.runnerConfig.defaultDesktop.len > 0:
+          let found = app.desktopOptions.find(app.runnerConfig.defaultDesktop)
+          if found >= 0: app.selectedDesktopIdx = found
+        app.step = stepDesktop
+      else:
+        app.desktopOptions = @[]
+        app.selectedDesktopIdx = -1
+        app.step = stepDisk)
+
+proc drawDesktop(x0: float) =
+  heading("de-title", t("de_title"), x0, 90, 700, 30)
+  paragraph("de-body", t("de_body"), x0, 128, 700, 60)
+  var y = 210.0
+  for i, opt in app.desktopOptions:
+    choiceChip("de-" & $i, desktopOptionLabel(opt), x0, y, 460, 44,
+      app.selectedDesktopIdx == i, proc() = app.selectedDesktopIdx = i)
+    y += 54
+  y += 16
+  button("de-back", t("btn_back"), x0, y, 140, 46,
+    onClickAction = proc() = app.step = stepNetwork)
+  button("de-next", t("btn_next"), x0 + 160, y, 140, 46, primary = true,
+    onClickAction = proc() = app.step = stepDisk)
 
 proc diskLabel(d: DiskInfo): string =
   result = d.path & "   " & d.model & "   (" & humanSize(d.sizeBytes) & ")"
@@ -329,7 +389,8 @@ proc drawDisk(x0: float) =
       canProceed = app.liveDiskConfirmed
 
   button("d-back", t("btn_back"), x0, 700, 140, 46,
-    onClickAction = proc() = app.step = stepNetwork)
+    onClickAction = proc() =
+      app.step = (if app.desktopOptions.len > 0: stepDesktop else: stepNetwork))
   button("d-next", t("btn_next"), x0 + 160, 700, 140, 46,
     primary = true, enabled = canProceed,
     onClickAction = proc() =
@@ -552,6 +613,12 @@ proc drawSummary(x0: float) =
       AvailableTimezones[app.timezoneIdx]),
     x0, 234, 700, 26)
   var y = 262.0
+  let desktop = chosenDesktop()
+  if desktop.len > 0:
+    paragraph("s-desktop",
+      t("s_desktop", (if desktop == "none": t("de_none") else: desktop)),
+      x0, y, 700, 26)
+    y += 30
   if app.otherOses.len > 0:
     paragraph("s-dualboot", t("s_dualboot", app.otherOses.join(", ")), x0, y, 700, 30)
     y += 36
@@ -600,6 +667,7 @@ proc drawMain() =
     of stepLanguage: drawLanguage(x0)
     of stepKeyboard: drawKeyboard(x0)
     of stepNetwork: drawNetwork(x0)
+    of stepDesktop: drawDesktop(x0)
     of stepDisk: drawDisk(x0)
     of stepPartition: drawPartition(x0)
     of stepManualPartitions: drawManualPartitions(x0)
