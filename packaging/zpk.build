@@ -1,1 +1,25 @@
+package {
+  name        = "installer"
+  version     = "0.1.0"
+  arch        = ["x86_64"]
+  description = "Zenit Installer -- graficzny instalator Zenit Linux (Fidget UI)"
+  depends_on  = []
+}
 
+# Tylko x86_64: GUI linkuje bezpośrednio z OpenGL/GLFW/X11 (patrz
+# README.md, sekcja "Zależności systemowe"), więc cross-kompilacja przez
+# same CC/CXX/ZPM_PACKAGE_CROSS_PREFIX (patrz toolchains{} w README zpk)
+# nie wystarczy bez sysrootu z tymi bibliotekami dla drugiej architektury
+# -- nieobsługiwane tutaj, tak jak w build.janet/CI tego repo (patrz
+# detect-arch/task-package).
+
+recipe {
+  file = "recipe.janet"
+  lang = "janet"
+}
+
+release {
+  repo       = "https://github.com/Zenit-Linux/own-repository"
+  repo_file  = "repo/own-repository.json"
+  asset_name = "installer"
+}
