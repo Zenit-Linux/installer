@@ -50,18 +50,37 @@
   (sh (string "curl -fsSL -o " bundled-font " " inter-url))
   (print "Podmieniono -- upewnij się, że plik faktycznie jest poprawnym TTF (uruchom `janet build.janet assets`)."))
 
+(defn nimble-build-as [nim-args target-name]
+  # `nimble build` zawsze pisze pod nazwę z `bin` w Installer.nimble
+  # (czyli "installer") -- jeśli w out-dir leży już inna binarka pod tą
+  # nazwą (np. release z wcześniejszego `janet build.janet release`),
+  # trzeba ją na chwilę odsunąć, żeby `nimble build` jej nie nadpisała,
+  # zanim zdążymy przenieść ŚWIEŻY wynik pod `target-name` -- inaczej
+  # `janet build.janet debug`/`server` po `release` cicho kasowałoby
+  # release'ową binarkę.
+  (def installer-path (string out-dir "/installer"))
+  (def stash-path (string out-dir "/.installer.stash"))
+  (def had-existing (not (nil? (os/stat installer-path))))
+  (when had-existing (os/rename installer-path stash-path))
+  (sh (string "nimble build" (if (> (length nim-args) 0) (string " " nim-args) "")))
+  (os/rename installer-path (string out-dir "/" target-name))
+  (when had-existing (os/rename stash-path installer-path)))
+
 (defn task-release []
   (task-deps)
   (task-assets)
   (ensure-out-dir)
-  (sh (string "nim c -d:release --opt:speed --out:" out-dir "/installer " src-file))
+  # Zwykłe `nimble build` -- kompiluje wg `bin`/`binDir`/`srcDir` z
+  # Installer.nimble (czyli i tak `src/installer.nim` -> `bin/installer`),
+  # tylko przez sam `nimble`, bez ręcznego wołania `nim c ... --out:`.
+  (sh "nimble build -d:release --opt:speed")
   (sh (string "cp -r " data-dir " " out-dir "/"))
   (print "-> " out-dir "/installer (+ " out-dir "/" data-dir "/ -- MUSZĄ zostać razem)"))
 
 (defn task-debug []
   (task-assets)
   (ensure-out-dir)
-  (sh (string "nim c --out:" out-dir "/installer-debug " src-file))
+  (nimble-build-as "" "installer-debug")
   (sh (string "cp -r " data-dir " " out-dir "/"))
   (print "-> " out-dir "/installer-debug (+ " out-dir "/" data-dir "/)"))
 
@@ -72,7 +91,7 @@
   # kompilacji ani linkowania -- ta binarka nigdy nie woła loadFont, więc
   # nie potrzebuje data/fonts/ w ogóle.
   (ensure-out-dir)
-  (sh (string "nim c -d:release -d:server --opt:speed --out:" out-dir "/installer-server " src-file))
+  (nimble-build-as "-d:release -d:server --opt:speed" "installer-server")
   (print "-> " out-dir "/installer-server (headless -- bez Fidget/OpenGL/X11, bez data/)"))
 
 (defn task-check []
