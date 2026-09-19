@@ -139,5 +139,12 @@
 
 (let [all-args (or (dyn :args) @[])
       task (get all-args 1)
-      rest-args (array/slice all-args 2)]
+      # `(array/slice all-args 2)` wywala się z "start index ... out of
+      # range", gdy `all-args` ma mniej niż 2 elementy -- czyli właśnie
+      # przy `janet build.janet` bez żadnego argumentu zadania (wtedy
+      # `all-args` to tylko @["build.janet"], długość 1). `(get
+      # all-args 1)` wyżej jest bezpieczne (zwraca `nil`, co `main`
+      # już obsługuje jako `task-release` domyślne), ale samo
+      # `array/slice` trzeba osłonić długością.
+      rest-args (if (> (length all-args) 2) (array/slice all-args 2) @[])]
   (main task ;rest-args))
