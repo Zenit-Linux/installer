@@ -70,10 +70,12 @@
   (task-deps)
   (task-assets)
   (ensure-out-dir)
-  # Zwykłe `nimble build` -- kompiluje wg `bin`/`binDir`/`srcDir` z
-  # Installer.nimble (czyli i tak `src/installer.nim` -> `bin/installer`),
-  # tylko przez sam `nimble`, bez ręcznego wołania `nim c ... --out:`.
-  (sh "nimble build -d:release --opt:speed")
+  # Czyste `nimble build`, bez `-d:release --opt:speed` -- kompiluje wg
+  # `bin`/`binDir`/`srcDir` z Installer.nimble (czyli i tak
+  # `src/installer.nim` -> `bin/installer`), zwykłym poleceniem, jakim
+  # buduje się każdy inny pakiet nimble. Kto chce zoptymalizowaną
+  # binarkę, doda sobie flagi ręcznie: `nimble build -d:release`.
+  (sh "nimble build")
   (sh (string "cp -r " data-dir " " out-dir "/"))
   (print "-> " out-dir "/installer (+ " out-dir "/" data-dir "/ -- MUSZĄ zostać razem)"))
 
@@ -89,10 +91,14 @@
   # że installer.nim w ogóle nie importuje app.nim (patrz `when not
   # defined(server)` tamże), więc Fidget/OpenGL nigdy nie trafiają do
   # kompilacji ani linkowania -- ta binarka nigdy nie woła loadFont, więc
-  # nie potrzebuje data/fonts/ w ogóle.
+  # nie potrzebuje data/fonts/ w ogóle. `-d:server` zostaje -- to nie
+  # jest flaga optymalizacyjna jak `-d:release --opt:speed` (których już
+  # nigdzie tu nie ma), tylko przełącznik, BEZ którego ten wariant w
+  # ogóle nie miałby sensu (zbudowałby zwykłe GUI pod inną nazwą).
   (ensure-out-dir)
-  (nimble-build-as "-d:release -d:server --opt:speed" "installer-server")
+  (nimble-build-as "-d:server" "installer-server")
   (print "-> " out-dir "/installer-server (headless -- bez Fidget/OpenGL/X11, bez data/)"))
+
 
 (defn task-check []
   (sh (string "nim check " src-file)))
@@ -137,7 +143,20 @@
   (sh (string "sha256sum " name " > " out-dir "/SHA256SUMS-" version))
   (print "package " version " gotowy: " name " (+ katalog data/ obok niego, wymagany do działania GUI)"))
 
-(defn main [&opt task & args]
+(defn run-task [&opt task & args]
+  # UWAGA: ta funkcja CELOWO nie nazywa się `main` -- Janet ma wbudowaną
+  # konwencję: jeśli top-level skrypt definiuje funkcję o nazwie `main`,
+  # CLI PO WYKONANIU CAŁEGO PLIKU automatycznie woła ją PONOWNIE, samo,
+  # przekazując JAKO ARGUMENTY SUROWE `argv` (włącznie z nazwą samego
+  # skryptu jako pierwszym elementem!) -- patrz `run-main`/`cli-main` w
+  # boot.janet Janeta. Wcześniej ta funkcja nazywała się `main`, więc
+  # `janet build.janet release` wykonywał nasz WŁASNY, poprawny dispatch
+  # (main "release") -- co się w pełni i poprawnie kończyło (widać to po
+  # udanych printach `task-release`) -- a NASTĘPNIE, w tym samym procesie,
+  # Janet SAM DODATKOWO wołał `(main "build.janet" "release")`, czyli z
+  # "build.janet" jako task -- trafiającym w gałąź błędu niżej i kończącym
+  # PROCES kodem 1, mimo że build już się skończył sukcesem. Zwykła zmiana
+  # nazwy funkcji usuwa kolizję z tą konwencją.
   (case task
     "deps" (task-deps)
     "assets" (task-assets)
@@ -162,8 +181,8 @@
       # range", gdy `all-args` ma mniej niż 2 elementy -- czyli właśnie
       # przy `janet build.janet` bez żadnego argumentu zadania (wtedy
       # `all-args` to tylko @["build.janet"], długość 1). `(get
-      # all-args 1)` wyżej jest bezpieczne (zwraca `nil`, co `main`
+      # all-args 1)` wyżej jest bezpieczne (zwraca `nil`, co `run-task`
       # już obsługuje jako `task-release` domyślne), ale samo
       # `array/slice` trzeba osłonić długością.
       rest-args (if (> (length all-args) 2) (array/slice all-args 2) @[])]
-  (main task ;rest-args))
+  (run-task task ;rest-args))
