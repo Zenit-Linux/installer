@@ -127,6 +127,38 @@ Jeśli mimo wszystko zobaczysz ten błąd, uruchom ręcznie i wklej wynik:
 find ~/.nimble/pkgs2/opengl-* -maxdepth 3
 ```
 
+### Znany problem: `Error: type mismatch` w `fidget/opengl/base.nim` (`setFramebufferSizeCallback`)
+
+Jeśli kompilacja pada na etapie linkowania `fidget` komunikatem w stylu:
+
+```
+fidget-0.7.10-.../fidget/opengl/base.nim(385, 17) Error: type mismatch
+Expression: setFramebufferSizeCallback(window, onResize)
+  [2] onResize: proc (handle: Window, w: int32, h: int32){.cdecl.}
+Expected one of (first mismatch at [position]):
+[2] proc setFramebufferSizeCallback(window: Window; cbfun: FrameBufferSizeFun): FrameBufferSizeFun
+```
+
+to **nie jest błąd w tym repozytorium** -- to błąd w samej paczce
+`fidget` (sprawdzone na 0.7.10, ten sam kod jest na `master`):
+`onResize` jest zadeklarowane z parametrami `w, h: int32`, a
+`staticglfw` >= 4.1.2 (wymagane przez `fidget.nimble`) oczekuje tam
+`FrameBufferSizeFun = proc (window: Window, width: cint, height: cint)`.
+`cint` i `int32` mają identyczną reprezentację w pamięci, ale dla Nim to
+dwa różne typy importc ([nim-lang/Nim#11797](https://github.com/nim-lang/Nim/issues/11797)),
+więc dopasowanie typu proc-a przy przekazywaniu `onResize` jako
+wartości nie przechodzi.
+
+Naprawa działa dokładnie tak samo jak przy niespójności `opengl` wyżej:
+**`config.nims`** wykrywa ten konkretny wzorzec w zainstalowanym
+`~/.nimble/pkgs2/fidget-*/.../opengl/base.nim` i podmienia `int32` na
+`cint` w SAMEJ deklaracji `onResize` (parametry `w`/`h` i tak nie są
+nigdzie użyte w ciele tej proc, więc zmiana typu jest bezpieczna i nic
+innego nie zmienia). Działa automatycznie przy zwykłym `nimble build`/
+`janet build.janet release` -- nic dodatkowego nie trzeba robić, a
+łatka jest idempotentna (jeśli plik już ma `cint`, `config.nims` nic
+nie rusza).
+
 ### Znany problem: `File data/fonts/... does not exist` albo `key not found: head`
 
 Obie te awarie przy STARCIE binarki (nie przy kompilacji) mają tę samą
